@@ -6,6 +6,7 @@ using System.Drawing;
 using System.Text;
 using System.Windows.Forms;
 using AskReaderLib;
+
 namespace CSharpNETTestASKCSCDLL
 {
     public partial class Form1 : Form
@@ -17,7 +18,6 @@ namespace CSharpNETTestASKCSCDLL
 
         private void Form1_Load(object sender, EventArgs e)
         {
-
         }
 
         private void Button1_Click(object sender, EventArgs e)
@@ -28,7 +28,7 @@ namespace CSharpNETTestASKCSCDLL
             ATR = new byte[200];
             int lgATR;
             lgATR = 200;
-            int Com=0;
+            int Com = 0;
             int SearchMask;
 
             txtCom.Text = "";
@@ -54,11 +54,11 @@ namespace CSharpNETTestASKCSCDLL
                 // Define type of card to be detected
                 SearchMask = CSC.SEARCH_MASK_ISOB | CSC.SEARCH_MASK_ISOA;
                 Status = CSC.SearchCardExt(ref SearchExtender, SearchMask, 1, 20, ref Com, ref lgATR, ATR);
-                Console.WriteLine("lgATr "+lgATR);
+                Console.WriteLine("lgATr " + lgATR);
 
                 Console.WriteLine("Status " + Status);
                 if (Status != CSC.RCSC_Ok)
-                    txtCom.Text =  "Error :" + Status.ToString ("X");
+                    txtCom.Text = "Error :" + Status.ToString("X");
                 else
                     txtCom.Text = Com.ToString("X");
 
@@ -87,12 +87,67 @@ namespace CSharpNETTestASKCSCDLL
             {
                 MessageBox.Show("Error on trying do deal with reader");
             }
+
             CSC.Close();
         }
 
         private void txtCard_TextChanged(object sender, EventArgs e)
         {
+        }
 
+        private void select_appli()
+        {
+            byte[] byBuffIn = new byte[] {0x00, 0xA4, 0x04, 0x00, 0x07, 0xD2, 0x76, 0x00, 0x00, 0X85, 0x01, 0x01, 0x00};
+            byte[] buffOut = new byte[200];
+            int outSize = 300;
+            int returnCode = CSC.CSC_ISOCommand(byBuffIn, byBuffIn.Length, buffOut, ref outSize);
+            if (returnCode == CSC.RCSC_Ok && outSize > 2 && buffOut[outSize - 2] == 0x90 &&
+                buffOut[outSize - 1] == 0x00)
+            {
+                Console.WriteLine("selected appli");
+                return;
+            }
+
+            throw new Exception("select failed " + returnCode);
+        }
+
+        private void select_file(byte[] file)
+        {
+            byte[] buffOut = new byte[256];
+            int outSize = 300;
+            byte[] byBuffIn = new byte[] {0x00, 0xA4, 0x00, 0x0C, 0x02, file[0], file[1]};
+            int returnCode = CSC.CSC_ISOCommand(byBuffIn, byBuffIn.Length, buffOut, ref outSize);
+            if (returnCode == CSC.RCSC_Ok && outSize > 2 && buffOut[outSize - 2] == 0x90 &&
+                buffOut[outSize - 1] == 0x00)
+            {
+                Console.WriteLine("selected appli");
+                return;
+            }
+
+            throw new Exception("select failed " + returnCode);
+        }
+
+        private KeyValuePair<byte[], int> read_binary(Int16 maxLe, Int16 offset = 0x00)
+        {
+            KeyValuePair<byte[], int> pair;
+            byte[] buffOut = new byte[256];
+            int outSize = 300;
+            byte[] byBuffIn = new byte[] {0x00, 0xB0, (byte) (offset >> 8), (byte) offset, (byte) maxLe};
+            int returnCode = CSC.CSC_ISOCommand(byBuffIn, byBuffIn.Length, buffOut, ref outSize);
+            if (returnCode == CSC.RCSC_Ok && outSize > 2 && buffOut[outSize - 2] == 0x90 &&
+                buffOut[outSize - 1] == 0x00)
+            {
+                Console.WriteLine("read binary");
+                var res = new byte[outSize -3];
+                for (var i = 1; i < outSize - 2; i++)
+                {
+                    res[i -1] = buffOut[i];
+                }
+
+                return new KeyValuePair<byte[], int>(res, outSize-3);
+            }
+
+            throw new Exception("read binary failed " + returnCode);
         }
 
         private void button2_Click(object sender, EventArgs e)
@@ -158,50 +213,34 @@ namespace CSharpNETTestASKCSCDLL
                 else
                     txtCard.Text = "";
 
-                byte[] byBuffIn = new byte[] { 0x00, 0xA4, 0x04, 0x00, 0x07, 0xD2, 0x76, 0x00, 0x00, 0X85, 0x01, 0x01, 0x00 };
-                byte[] buffOut = new byte[200];
-                int outSize = 300;
-                int returnCode = CSC.CSC_ISOCommand(byBuffIn, byBuffIn.Length, buffOut, ref outSize);
-                Console.WriteLine(returnCode==CSC.RCSC_Ok);
-                if (returnCode == CSC.RCSC_Ok && outSize > 2 && buffOut[outSize - 2] == 0x90 && buffOut[outSize - 1] == 0x00)
+
+                select_appli();
+                select_file(new byte[] {0xE1, 0x03});
+                var result = read_binary(0x0F);
+
+                byte[] buffOut = result.Key;
+                int read = result.Value;
+                short maxLe = (short) (buffOut[3] << 8 | buffOut[4]);
+                int maxLc = buffOut[6] << 8 | buffOut[7];
+                byte[] lid = new byte[] {buffOut[9], buffOut[10]};
+                int maxLength = buffOut[11] << 8 | buffOut[12];
+
+                select_file(new byte[] {lid[0], lid[1]});
+
+                var fileData = new List<byte>();
+                for (Int16 i = 0; i < maxLength; i += maxLe)
                 {
-                    outSize = 300;
-                    byBuffIn = new byte[] { 0x00, 0xA4, 0x00, 0x0C, 0x02, 0xE1, 0x03 };
-                    returnCode = CSC.CSC_ISOCommand(byBuffIn, buffOut.Length, buffOut, ref outSize);
-                    if (returnCode == CSC.RCSC_Ok && outSize > 2 && buffOut[outSize - 2] == 0x90 && buffOut[outSize - 1] == 0x00)
-                    {
-                        outSize = 300;
-                        byBuffIn = new byte[] { 0x00, 0xB0, 0x00, 0x00, 0x0F };
-                        returnCode = CSC.CSC_ISOCommand(byBuffIn, buffOut.Length, buffOut, ref outSize);
-                        if (returnCode == CSC.RCSC_Ok && outSize > 2 && buffOut[outSize - 2] == 0x90 && buffOut[outSize - 1] == 0x00)
-                        {
-                            int maxLe = buffOut[4] << 8 | buffOut[5];
-                            int maxLc = buffOut[6] << 8 | buffOut[7];
-                            byte[] lid = new byte[] { buffOut[10], buffOut[11] };
-                            int maxLength = buffOut[12] << 8 | buffOut[13];
-                            Console.WriteLine(maxLe + " " + maxLc + " " + lid + " " + maxLength);
-                            outSize = 300;
-                            byBuffIn = new byte[] { 0x00, 0xA4, 0x00, 0x0C, 0x02, lid[0], lid[1] };
-                            returnCode = CSC.CSC_ISOCommand(byBuffIn, buffOut.Length, buffOut, ref outSize);
-                            if (returnCode == CSC.RCSC_Ok && outSize > 2 && buffOut[outSize - 2] == 0x90 && buffOut[outSize - 1] == 0x00)
-                            {
-                                byBuffIn = new byte[] { 0x00, 0xB0, 0x00,  (byte)(maxLe>>8),(byte)maxLe};
-                                returnCode = CSC.CSC_ISOCommand(byBuffIn, buffOut.Length, buffOut, ref outSize);
-                                if (returnCode == CSC.RCSC_Ok && outSize > 2 && buffOut[outSize - 2] == 0x90 && buffOut[outSize - 1] == 0x00)
-                                {
-                                    byBuffIn = new byte[] { 0x00, 0xB0, 0x00, 0x00, 0x0F };
-                                    returnCode = CSC.CSC_ISOCommand(byBuffIn, buffOut.Length, buffOut, ref outSize);
-                                }
-                            }
-                        }
-                    }
+                    result = read_binary((Int16) maxLe,  i);
+                    fileData.AddRange(result.Key);
                 }
-               
+
+                Console.WriteLine(CSC.ToStringN(fileData.ToArray()) + "\n aa" + fileData.Count);
             }
             catch
             {
                 MessageBox.Show("Error on trying do deal with reader");
             }
+
             AskReaderLib.CSC.Close();
         }
     }

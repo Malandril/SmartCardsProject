@@ -1,4 +1,5 @@
 using System;
+using System.Collections;
 using System.Collections.Generic;
 using System.ComponentModel;
 using System.Data;
@@ -138,16 +139,43 @@ namespace CSharpNETTestASKCSCDLL
                 buffOut[outSize - 1] == 0x00)
             {
                 Console.WriteLine("read binary");
-                var res = new byte[outSize -3];
+                var res = new byte[outSize - 3];
                 for (var i = 1; i < outSize - 2; i++)
                 {
-                    res[i -1] = buffOut[i];
+                    res[i - 1] = buffOut[i];
                 }
 
-                return new KeyValuePair<byte[], int>(res, outSize-3);
+                return new KeyValuePair<byte[], int>(res, outSize - 3);
             }
 
             throw new Exception("read binary failed " + returnCode);
+        }
+
+        private void readContent(byte[] bytes)
+        {
+            var startIndex = 2;
+            var header = bytes[startIndex];
+            var bitArray = new BitArray(new byte[] {header});
+            var mb = bitArray[7];
+            var me = bitArray[6];
+            var cf = bitArray[5];
+            var sr = bitArray[4];
+            var il = bitArray[3];
+            byte tnf = (byte) (header & 0x07);
+
+            Console.WriteLine("mb: " + mb + " me: " + me + " cf: " + cf + " sr: " + sr + " il: " + il + " tnf: " +
+                              Convert.ToString(tnf, 2).PadLeft(3, '0'));
+
+            var typeLength = bytes[startIndex + 1];
+            int payloadLength;
+            if (sr)
+            {
+                payloadLength = bytes[startIndex + 2];
+            }
+            else
+            {
+//                payloadLength = Convert.TO
+            }
         }
 
         private void button2_Click(object sender, EventArgs e)
@@ -230,11 +258,12 @@ namespace CSharpNETTestASKCSCDLL
                 var fileData = new List<byte>();
                 for (Int16 i = 0; i < maxLength; i += maxLe)
                 {
-                    result = read_binary((Int16) maxLe,  i);
+                    result = read_binary((Int16) maxLe, i);
                     fileData.AddRange(result.Key);
                 }
 
                 Console.WriteLine(CSC.ToStringN(fileData.ToArray()) + "\n aa" + fileData.Count);
+                readContent(fileData.ToArray());
             }
             catch
             {

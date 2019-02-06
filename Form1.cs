@@ -98,7 +98,7 @@ namespace CSharpNETTestASKCSCDLL
 
         private void select_appli()
         {
-            byte[] byBuffIn = new byte[] {0x00, 0xA4, 0x04, 0x00, 0x07, 0xD2, 0x76, 0x00, 0x00, 0X85, 0x01, 0x01, 0x00};
+            byte[] byBuffIn = new byte[] { 0x00, 0xA4, 0x04, 0x00, 0x07, 0xD2, 0x76, 0x00, 0x00, 0X85, 0x01, 0x01, 0x00 };
             byte[] buffOut = new byte[200];
             int outSize = 300;
             int returnCode = CSC.CSC_ISOCommand(byBuffIn, byBuffIn.Length, buffOut, ref outSize);
@@ -116,7 +116,7 @@ namespace CSharpNETTestASKCSCDLL
         {
             byte[] buffOut = new byte[256];
             int outSize = 300;
-            byte[] byBuffIn = new byte[] {0x00, 0xA4, 0x00, 0x0C, 0x02, file[0], file[1]};
+            byte[] byBuffIn = new byte[] { 0x00, 0xA4, 0x00, 0x0C, 0x02, file[0], file[1] };
             int returnCode = CSC.CSC_ISOCommand(byBuffIn, byBuffIn.Length, buffOut, ref outSize);
             if (returnCode == CSC.RCSC_Ok && outSize > 2 && buffOut[outSize - 2] == 0x90 &&
                 buffOut[outSize - 1] == 0x00)
@@ -133,7 +133,7 @@ namespace CSharpNETTestASKCSCDLL
             KeyValuePair<byte[], int> pair;
             byte[] buffOut = new byte[256];
             int outSize = 300;
-            byte[] byBuffIn = new byte[] {0x00, 0xB0, (byte) (offset >> 8), (byte) offset, (byte) maxLe};
+            byte[] byBuffIn = new byte[] { 0x00, 0xB0, (byte)(offset >> 8), (byte)offset, (byte)maxLe };
             int returnCode = CSC.CSC_ISOCommand(byBuffIn, byBuffIn.Length, buffOut, ref outSize);
             if (returnCode == CSC.RCSC_Ok && outSize > 2 && buffOut[outSize - 2] == 0x90 &&
                 buffOut[outSize - 1] == 0x00)
@@ -153,29 +153,97 @@ namespace CSharpNETTestASKCSCDLL
 
         private void readContent(byte[] bytes)
         {
-            var startIndex = 2;
-            var header = bytes[startIndex];
-            var bitArray = new BitArray(new byte[] {header});
-            var mb = bitArray[7];
-            var me = bitArray[6];
-            var cf = bitArray[5];
-            var sr = bitArray[4];
-            var il = bitArray[3];
-            byte tnf = (byte) (header & 0x07);
 
-            Console.WriteLine("mb: " + mb + " me: " + me + " cf: " + cf + " sr: " + sr + " il: " + il + " tnf: " +
-                              Convert.ToString(tnf, 2).PadLeft(3, '0'));
+            //byte[] segment = slice(bytes, 2, 3);
+            //Console.WriteLine("segment : " + segment[0]);
 
-            var typeLength = bytes[startIndex + 1];
-            int payloadLength;
-            if (sr)
+            var me = false;
+            long startIndex = 1;
+            while (!me)
             {
-                payloadLength = bytes[startIndex + 2];
+
+                var header = bytes[++startIndex];
+                var bitArray = new BitArray(new byte[] { header });
+                var mb = bitArray[7];
+                me = bitArray[6];
+                var cf = bitArray[5];
+                var sr = bitArray[4];
+                var il = bitArray[3];
+                byte tnf = (byte)(header & 0x07);
+
+                Console.WriteLine("mb: " + mb + " me: " + me + " cf: " + cf + " sr: " + sr + " il: " + il + " tnf: " +
+                  Convert.ToString(tnf, 2).PadLeft(3, '0'));
+
+                //champ type length
+                var typeLength = bytes[++startIndex];
+
+                //champ payload length
+                long payloadLength = 0;
+                if (sr)
+                {
+                    payloadLength = bytes[++startIndex];
+                }
+                else
+                {
+                    var subArray = slice(bytes, startIndex, startIndex + 3);
+                    payloadLength = convertByteArrayToInt(subArray);
+                    startIndex += 4;
+                }
+                int idLength = 0;
+                if (il)
+                {
+                    idLength = bytes[++startIndex];
+                }
+
+                //champs type
+                byte[] type = slice(bytes,startIndex,startIndex+typeLength-1); //indice à changer pour la suite
+                startIndex += typeLength;
+
+                //champs id
+                byte[] id = new byte[idLength];
+                if (il)
+                {
+                    //id en fonction de idLength
+                    id = slice(bytes, startIndex, startIndex + idLength - 1);
+                    startIndex += idLength;
+                }
+
+                //champ payload
+                //tableau de byte de longueur payloadLength
+                byte[] payload = slice(bytes, startIndex, startIndex + payloadLength - 1);
+                var str = System.Text.Encoding.Default.GetString(payload);
+
+                startIndex += payloadLength;
+
+                Console.WriteLine("me : " + me);
+                Console.WriteLine("start : " + startIndex);
+                Console.WriteLine("text : " + str);
             }
-            else
+
+            
+
+
+        }
+
+        private byte[] slice(byte[] bytes, long start, long end)
+        {
+            byte[] res = new byte[end - start + 1];
+            for (int i = 0; i <= end - start; i++)
             {
-//                payloadLength = Convert.TO
+                res[i] = bytes[start + i];
             }
+            return res;
+        }
+
+        private long convertByteArrayToInt(byte[] bytes)
+        {
+            // If the system architecture is little-endian (that is, little end first),
+            // reverse the byte array.
+            if (BitConverter.IsLittleEndian)
+                Array.Reverse(bytes);
+
+            long i = BitConverter.ToInt64(bytes, 0);
+            return i;
         }
 
         private void button2_Click(object sender, EventArgs e)
@@ -243,22 +311,22 @@ namespace CSharpNETTestASKCSCDLL
 
 
                 select_appli();
-                select_file(new byte[] {0xE1, 0x03});
+                select_file(new byte[] { 0xE1, 0x03 });
                 var result = read_binary(0x0F);
 
                 byte[] buffOut = result.Key;
                 int read = result.Value;
-                short maxLe = (short) (buffOut[3] << 8 | buffOut[4]);
+                short maxLe = (short)(buffOut[3] << 8 | buffOut[4]);
                 int maxLc = buffOut[6] << 8 | buffOut[7];
-                byte[] lid = new byte[] {buffOut[9], buffOut[10]};
+                byte[] lid = new byte[] { buffOut[9], buffOut[10] };
                 int maxLength = buffOut[11] << 8 | buffOut[12];
 
-                select_file(new byte[] {lid[0], lid[1]});
+                select_file(new byte[] { lid[0], lid[1] });
 
                 var fileData = new List<byte>();
                 for (Int16 i = 0; i < maxLength; i += maxLe)
                 {
-                    result = read_binary((Int16) maxLe, i);
+                    result = read_binary((Int16)maxLe, i);
                     fileData.AddRange(result.Key);
                 }
 

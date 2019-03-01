@@ -23,77 +23,7 @@ namespace CSharpNETTestASKCSCDLL
         {
         }
 
-        private void Button1_Click(object sender, EventArgs e)
-        {
-            CSC.sCARD_SearchExtTag SearchExtender;
-            int Status;
-            byte[] ATR;
-            ATR = new byte[200];
-            int lgATR;
-            lgATR = 200;
-            int Com = 0;
-            int SearchMask;
-
-            txtCom.Text = "";
-            txtCard.Text = "";
-
-            try
-            {
-                CSC.SearchCSC();
-                // user can also use line below to speed up coupler connection
-                //AskReaderLib.CSC.Open ("COM2");
-
-                // Define type of card to be detected: number of occurence for each loop
-                SearchExtender.CONT = 0;
-                SearchExtender.ISOB = 2;
-                SearchExtender.ISOA = 2;
-                SearchExtender.TICK = 0;
-                SearchExtender.INNO = 0;
-                SearchExtender.MIFARE = 0;
-                SearchExtender.MV4k = 0;
-                SearchExtender.MV5k = 0;
-                SearchExtender.MONO = 0;
-
-                // Define type of card to be detected
-                SearchMask = CSC.SEARCH_MASK_ISOB | CSC.SEARCH_MASK_ISOA;
-                Status = CSC.SearchCardExt(ref SearchExtender, SearchMask, 1, 20, ref Com, ref lgATR, ATR);
-                Console.WriteLine("lgATr " + lgATR);
-
-                Console.WriteLine("Status " + Status);
-                if (Status != CSC.RCSC_Ok)
-                    txtCom.Text = "Error :" + Status.ToString("X");
-                else
-                    txtCom.Text = Com.ToString("X");
-
-                if (Com == 2)
-                    txtCard.Text = "ISO14443A-4 no Calypso";
-                else if (Com == 3)
-                    txtCard.Text = "INNOVATRON";
-                else if (Com == 4)
-                    txtCard.Text = "ISOB14443B-4 Calypso";
-                else if (Com == 5)
-                    txtCard.Text = "Mifare";
-                else if (Com == 6)
-                    txtCard.Text = "CTS or CTM";
-                else if (Com == 8)
-                    txtCard.Text = "ISO14443A-3 ";
-                else if (Com == 9)
-                    txtCard.Text = "ISOB14443B-4 Calypso";
-                else if (Com == 12)
-                    txtCard.Text = "ISO14443A-4 Calypso";
-                else if (Com == 0x6F)
-                    txtCard.Text = "Card not found";
-                else
-                    txtCard.Text = "";
-            }
-            catch
-            {
-                MessageBox.Show("Error on trying do deal with reader");
-            }
-
-            CSC.Close();
-        }
-
+        
         private void txtCard_TextChanged(object sender, EventArgs e)
         {
         }
@@ -104,6 +34,9 @@ namespace CSharpNETTestASKCSCDLL
             byte[] buffOut = new byte[200];
             int outSize = 300;
             int returnCode = CSC.CSC_ISOCommand(byBuffIn, byBuffIn.Length, buffOut, ref outSize);
+            Console.WriteLine("return code : " + returnCode);
+            Console.WriteLine("buffout : " + CSC.ToStringN(buffOut));
+
             if (returnCode == CSC.RCSC_Ok && outSize > 2 && buffOut[outSize - 2] == 0x90 &&
                 buffOut[outSize - 1] == 0x00)
             {
@@ -150,7 +83,7 @@ namespace CSharpNETTestASKCSCDLL
                 return new KeyValuePair<byte[], int>(res, outSize - 3);
             }
             Console.WriteLine("offset : " + offset + " maxLe : " + maxLe);
-            throw new Exception("read binary failed " + returnCode);
+            throw new Exception("read binary failed " + CSC.ToStringN(buffOut));
         }
 
         private byte[] slice(byte[] bytes, long start, long end)
@@ -300,7 +233,7 @@ namespace CSharpNETTestASKCSCDLL
                             break;
                     }
                     //Console.WriteLine("UriIdentifier : " + UriIdentifier);
-                    var uri = slice(bytes, startIndex, startIndex + payloadLength - 1);
+                    var uri = slice(bytes, startIndex+1, startIndex + payloadLength - 1);
                     //Console.WriteLine("uri : " + Encoding.UTF8.GetString(uri));
                     startIndex += payloadLength - 1;
                     results.Add("Uri : "+UriIdentifier + Encoding.UTF8.GetString(uri));
@@ -330,7 +263,7 @@ namespace CSharpNETTestASKCSCDLL
             else
             {
                 //Console.WriteLine("type is Raw");
-                var message = Encoding.UTF8.GetString(slice(bytes, startIndex, startIndex + payloadLength));
+                var message = Encoding.UTF8.GetString(slice(bytes, startIndex+1, startIndex + payloadLength));
                 //Console.WriteLine("message : " + message);
                 startIndex += payloadLength-1;
                 results.Add("Raw : message = "+message);
@@ -355,9 +288,13 @@ namespace CSharpNETTestASKCSCDLL
 
             }
 
+            string new_data = "";
             foreach(String s in results){
+                new_data += s + "\n";
                 Console.WriteLine(s);
             }
+            label5.Text = new_data;
+
 
         }
 
@@ -448,21 +385,13 @@ namespace CSharpNETTestASKCSCDLL
             byte[] command = new byte[] { 0x00, 0xD6 };
             //offset
             byte[] offset = new byte[] { 0x00, 0x00 };
-            //LC ??? wat to do ?
-            byte[] Lc = convertIntToByteArray(maxLc);
-            Lc = new byte[] { Lc[2], Lc[3] };
-            //header creation
-            //0x02 est la longueur du champs type qui est ici 0x53, 0x70
-            byte[] header = new byte[] { 0x00, (byte)(dataToWrite.Length+5), 0xD1, 0x02, (byte)dataToWrite.Length, 0x54, 0x70 };
             //total length
-            byte[] totalLength = new byte[] { (byte)(dataToWrite.Length + 2) , 0x00, (byte)(dataToWrite.Length) };
-            Console.WriteLine("head + data : ", header.Length + dataToWrite.Length);
+            byte[] totalLength = new byte[] { (byte)(dataToWrite.Length + 2), 0x00, (byte)(dataToWrite.Length) };
 
             //create global buff in
             byte[] byBuffIn = new byte[command.Length + offset.Length + totalLength.Length /*+ header.Length*/ + dataToWrite.Length];
             command.CopyTo(byBuffIn, 0);
             offset.CopyTo(byBuffIn, command.Length);
-            //header.CopyTo(byBuffIn, command.Length + offset.Length + totalLength.Length);
             totalLength.CopyTo(byBuffIn, command.Length + offset.Length);
             dataToWrite.CopyTo(byBuffIn, command.Length + offset.Length + totalLength.Length /*+ header.Length*/);
 
@@ -483,6 +412,118 @@ namespace CSharpNETTestASKCSCDLL
             throw new Exception("write failed " + returnCode);
         }
 
+        /*
+         * WRITING CODE
+         */
+        private void Button1_Click(object sender, EventArgs e)
+        {
+            results.Clear();
+            CSC.sCARD_SearchExtTag SearchExtender;
+            int Status;
+            byte[] ATR;
+            ATR = new byte[200];
+            int lgATR;
+            lgATR = 200;
+            int Com = 0;
+            int SearchMask;
+
+            txtCom.Text = "";
+            txtCard.Text = "";
+
+            try
+            {
+                CSC.SearchCSC();
+                // user can also use line below to speed up coupler connection
+                //AskReaderLib.CSC.Open ("COM2");
+
+                // Define type of card to be detected: number of occurence for each loop
+                SearchExtender.CONT = 0;
+                SearchExtender.ISOB = 2;
+                SearchExtender.ISOA = 2;
+                SearchExtender.TICK = 0;
+                SearchExtender.INNO = 0;
+                SearchExtender.MIFARE = 0;
+                SearchExtender.MV4k = 0;
+                SearchExtender.MV5k = 0;
+                SearchExtender.MONO = 0;
+                Status = CSC.CSC_EHP_PARAMS_EXT(1, 1, 0, 0, 0, 0, 0, 0, null, 0, 0);
+                // Define type of card to be detected
+                SearchMask = CSC.SEARCH_MASK_ISOB | CSC.SEARCH_MASK_ISOA;
+                Status = CSC.SearchCardExt(ref SearchExtender, SearchMask, 1, 20, ref Com, ref lgATR, ATR);
+                Console.WriteLine("lgATr " + lgATR);
+                Console.WriteLine("SearchExtender " + SearchExtender.ISOA + " " + SearchExtender.ISOB);
+                Console.WriteLine("ATR", CSC.ToStringN(ATR));
+                Console.WriteLine("Status " + Status);
+                if (Status != CSC.RCSC_Ok)
+                    txtCom.Text = "Error :" + Status.ToString("X");
+                else
+                    txtCom.Text = Com.ToString("X");
+                if (Com == 2)
+                    txtCard.Text = "ISO14443A-4 no Calypso";
+                else if (Com == 3)
+                    txtCard.Text = "INNOVATRON";
+                else if (Com == 4)
+                    txtCard.Text = "ISOB14443B-4 Calypso";
+                else if (Com == 5)
+                    txtCard.Text = "Mifare";
+                else if (Com == 6)
+                    txtCard.Text = "CTS or CTM";
+                else if (Com == 8)
+                    txtCard.Text = "ISO14443A-3 ";
+                else if (Com == 9)
+                    txtCard.Text = "ISOB14443B-4 Calypso";
+                else if (Com == 12)
+                    txtCard.Text = "ISO14443A-4 Calypso";
+                else if (Com == 0x6F)
+                    txtCard.Text = "Card not found";
+                else
+                    txtCard.Text = "";
+
+
+                select_appli();
+                select_file(new byte[] { 0xE1, 0x03 });
+                var result = read_binary(0x0F);
+
+                byte[] buffOut = result.Key;
+                int read = result.Value;
+                short maxLe = (short)(buffOut[3] << 8 | buffOut[4]);
+                int maxLc = buffOut[5] << 8 | buffOut[6];
+                byte[] lid = new byte[] { buffOut[9], buffOut[10] };
+                int maxLength = buffOut[11] << 8 | buffOut[12];
+
+                select_file(new byte[] { lid[0], lid[1] });
+                Console.WriteLine("maxLength : " + maxLength);
+                Console.WriteLine("maxLe : " + maxLe);
+                Console.WriteLine("maxLc : " + maxLc);
+
+                //get infos from box in UI
+                string texte = RawBox.Text;
+                string data = TextBox.Text;
+                string uri = UriBox.Text;
+                string protocol = listBox1.Text;
+
+
+                writeContent(maxLc, uri, texte, data, protocol);
+                //testWriteContent();
+
+                Console.WriteLine("outOfwrite");
+
+            }
+            catch (Exception exp)
+            {
+                Console.WriteLine("error :" + exp);
+                MessageBox.Show("Error on trying do deal with reader");
+            }
+
+            AskReaderLib.CSC.Close();
+
+
+        }
+
+
+        /*
+         * READING CODE
+         */
         private void button2_Click(object sender, EventArgs e)
         {
             results.Clear();    
@@ -564,17 +605,7 @@ namespace CSharpNETTestASKCSCDLL
                 Console.WriteLine("maxLe : " + maxLe);
                 Console.WriteLine("maxLc : " + maxLc);
 
-                //string data = "paragon-rfid.com";
-                string data = "Coucou Tibow !";
-                string texte = "1234";
-                string uri = "google.com";
-                string protocol = "http://www.";
-                //string protocol = "N/A";
-
-                //writeContent(maxLc, uri, texte, data, protocol);
-                //testWriteContent();
-
-                Console.WriteLine("outOfwrite");
+                //multiple readbinary in order to have the complete message
                 var fileData = new List<byte>();
                 for (Int16 i = 0; i < maxLength; i += maxLe)
                 {
@@ -583,20 +614,22 @@ namespace CSharpNETTestASKCSCDLL
                 }
 
 
-                /*var test = new byte[] { 0x43, 0x6F, 0x75, 0x63, 0x6F, 0x75, 0x20, 0x54, 0x69, 0x62, 0x6F, 0x77, 0x20,0x21 };
-                var test2 = new byte[] { 0x01, 0x67, 0x6F, 0x6F, 0x67, 0x6C, 0x65, 0x2E, 0x63, 0x6F, 0x66,0x72 };
-                Console.WriteLine("test : "+ System.Text.Encoding.UTF8.GetString(test));*/
-
                 Console.WriteLine(CSC.ToStringN(fileData.ToArray()) + "\n aa" + fileData.Count);
                 readContent(fileData.ToArray());
 
             }
-            catch
+            catch(Exception exp)
             {
+                Console.WriteLine("error :" + exp);
                 MessageBox.Show("Error on trying do deal with reader");
             }
 
             AskReaderLib.CSC.Close();
+        }
+
+        private void label2_Click(object sender, EventArgs e)
+        {
+
         }
     }
 
